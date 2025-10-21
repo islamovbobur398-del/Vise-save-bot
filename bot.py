@@ -1,120 +1,143 @@
-# bot.py
-import os
-import subprocess
-import requests
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
-import uuid
-import json
+# ===========================================
+# UNIVERSAL DOWNLOADER + SHAZAM TELEGRAM BOT
+# ===========================================
 
+import os
+import requests
+import yt_dlp
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+)
+from dotenv import load_dotenv
+from acrcloud.recognizer import ACRCloudRecognizer
+import tempfile
+import subprocess
+
+# 🔹 .env fayldan ma'lumotlarni yuklaymiz
+load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ACR_HOST = os.getenv("ACR_HOST")
 ACR_ACCESS_KEY = os.getenv("ACR_ACCESS_KEY")
 ACR_ACCESS_SECRET = os.getenv("ACR_ACCESS_SECRET")
 
-DOWNLOAD_DIR = "/tmp"
+# 🔹 Shazam (ACRCloud) sozlamalari
+config = {
+    "host": ACR_HOST,
+    "access_key": ACR_ACCESS_KEY,
+    "access_secret": ACR_ACCESS_SECRET,
+    "timeout": 10,
+}
 
+recognizer = ACRCloudRecognizer(config)
+
+# =====================================================
+# 1. Boshlang'ich /start komandasi
+# =====================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🎧 Salom! Menga video, audio yoki link yuboring — men qo‘shiqni topaman va yuklab beraman.")
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = await update.message.reply_text("⏳ Iltimos, kuting...")
-
-    file_path = None
-    url = update.message.text.strip() if update.message.text else None
-    uid = str(uuid.uuid4())
-    base_path = os.path.join(DOWNLOAD_DIR, uid)
-
-    # 1. Agar foydalanuvchi URL yuborgan bo‘lsa
-    if url and (url.startswith("http://") or url.startswith("https://")):
-        out_template = base_path + ".%(ext)s"
-        cmd = ["yt-dlp", "-f", "best", "-o", out_template, url]
-        try:
-            subprocess.run(cmd, check=True, text=True, capture_output=True, timeout=180)
-            for f in os.listdir(DOWNLOAD_DIR):
-                if f.startswith(uid):
-                    file_path = os.path.join(DOWNLOAD_DIR, f)
-                    break
-        except subprocess.CalledProcessError:
-            await msg.edit_text("⚠️ Video yuklab bo‘lmadi.")
-            return
-
-    # 2. Agar foydalanuvchi video, audio yoki voice yuborsa
-    elif update.message.video or update.message.audio or update.message.voice or update.message.video_note:
-        tg_file = (
-            update.message.video or
-            update.message.audio or
-            update.message.voice or
-            update.message.video_note
-        )
-        new_file = await tg_file.get_file()
-        file_path = base_path + ".mp4"
-        await new_file.download_to_drive(file_path)
-
-    else:
-        await msg.edit_text("⚠️ Faqat link, video yoki audio yuboring.")
-        return
-
-    # 3. Audio ajratamiz
-    audio_path = base_path + ".mp3"
-    subprocess.run(["ffmpeg", "-y", "-i", file_path, "-vn", "-acodec", "libmp3lame", "-q:a", "2", audio_path])
-
-    # 4. Shazam (ACRCloud) orqali aniqlash
-    result = identify_music(audio_path)
-
-    # 5. Natijani yuboramiz
-    if result:
-        title = result.get("title", "Noma’lum")
-        artist = result.get("artists", [{}])[0].get("name", "")
-        msg_text = f"🎵 Topildi!\n\n**Nom:** {title}\n**Ijrochi:** {artist}"
-        await update.message.reply_text(msg_text, parse_mode="Markdown")
-
-        # Audio faylni foydalanuvchiga yuborish
-        await update.message.reply_audio(open(audio_path, "rb"))
-    else:
-        await update.message.reply_text("😔 Qo‘shiqni aniqlab bo‘lmadi.")
-
-    try:
-        os.remove(file_path)
-        os.remove(audio_path)
-    except:
-        pass
-
-def identify_music(audio_file):
-    import hmac, hashlib, base64, time
-
-    http_method = "POST"
-    http_uri = "/v1/identify"
-    data_type = "audio"
-    signature_version = "1"
-    timestamp = str(int(time.time()))
-
-    string_to_sign = (
-        http_method + "\n" + http_uri + "\n" + ACR_ACCESS_KEY + "\n" + data_type + "\n" + signature_version + "\n" + timestamp
+    await update.message.reply_text(
+        "👋 Salom! Men universal media yuklovchi botman.\n"
+        "Menga istalgan ijtimoiy tarmoq linkini yoki video/audio yuboring 🎥🎵\n"
+        "Men uni yuklab beraman va qo‘shiqni aniqlab beraman 🎶"
     )
 
-    sign = base64.b64encode(
-        hmac.new(ACR_ACCESS_SECRET.encode('ascii'), string_to_sign.encode('ascii'), digestmod=hashlib.sha1).digest()
-    ).decode('ascii')
-
-    files = {'sample': open(audio_file, 'rb')}
-    data = {
-        'access_key': ACR_ACCESS_KEY,
-        'data_type': data_type,
-        'signature_version': signature_version,
-        'signature': sign,
-        'sample_bytes': os.path.getsize(audio_file),
-        'timestamp': timestamp,
+# =====================================================
+# 2. Yuklab olish funksiyasi (har xil saytlar uchun)
+# =====================================================
+async def download_media(url: str):
+    ydl_opts = {
+        "outtmpl": "%(title)s.%(ext)s",
+        "format": "best",
+        "quiet": True,
     }
 
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        download_url = info.get("url", None)
+        title = info.get("title", "video")
+        ext = info.get("ext", "mp4")
+
+        filename = f"{title}.{ext}"
+        ydl.download([url])
+        return filename, title
+
+
+# =====================================================
+# 3. Shazam orqali qo‘shiqni aniqlash funksiyasi
+# =====================================================
+def recognize_music(file_path: str):
     try:
-        r = requests.post(ACR_HOST + "/v1/identify", files=files, data=data, timeout=15)
-        return r.json().get('metadata', {}).get('music', [{}])[0]
+        result = recognizer.recognize_by_file(file_path, 0)
+        if "metadata" in result and "music" in result["metadata"]:
+            music_info = result["metadata"]["music"][0]
+            title = music_info.get("title", "Noma'lum qo‘shiq")
+            artist = music_info.get("artists", [{"name": "Noma'lum ijrochi"}])[0]["name"]
+            album = music_info.get("album", {}).get("name", "")
+            return f"🎵 {title}\n👤 {artist}\n💿 {album}"
+        else:
+            return "⚠️ Qo‘shiq aniqlanmadi."
     except Exception as e:
-        print("ACR Error:", e)
-        return None
+        return f"❌ Xatolik: {e}"
+
+
+# =====================================================
+# 4. Har qanday xabarni avtomatik aniqlovchi handler
+# =====================================================
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+
+    # 🔹 Agar foydalanuvchi link yuborsa (video yuklash)
+    if message.text and ("http" in message.text or "https" in message.text):
+        url = message.text.strip()
+        await message.reply_text("⏳ Yuklanmoqda, biroz kuting...")
+
+        try:
+            filename, title = await download_media(url)
+            await message.reply_text(f"✅ Yuklandi: {title}")
+            await message.reply_video(video=open(filename, "rb"))
+            await message.reply_audio(audio=open(filename, "rb"))
+
+            # 🔹 Shazam orqali aniqlaymiz
+            song_info = recognize_music(filename)
+            await message.reply_text(song_info)
+
+        except Exception as e:
+            await message.reply_text(f"❌ Xatolik yuz berdi: {e}")
+
+    # 🔹 Agar foydalanuvchi audio, video yoki voice yuborsa (Shazam ishlaydi)
+    elif message.audio or message.voice or message.video:
+        await message.reply_text("🎧 Qo‘shiq aniqlanmoqda...")
+
+        file = message.audio or message.voice or message.video
+        file_id = file.file_id
+        file_obj = await context.bot.get_file(file_id)
+
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            await file_obj.download_to_drive(temp_file.name)
+            result = recognize_music(temp_file.name)
+            await message.reply_text(result)
+            os.remove(temp_file.name)
+
+    else:
+        await message.reply_text("🔗 Menga ijtimoiy tarmoq linki yoki audio/video yuboring.")
+
+
+# =====================================================
+# 5. Botni ishga tushirish
+# =====================================================
+def main():
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.ALL, handle_message))
+
+    print("🤖 Bot ishga tushdi...")
+    app.run_polling()
+
 
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(MessageHandler(filters.ALL, handle_message))
-    app.run_polling()
+    main()
