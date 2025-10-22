@@ -1,27 +1,31 @@
 # ===============================
-# 🔹 Universal Downloader Bot — Dockerfile
+# 🔹 Universal Downloader Bot — Xatarsiz Dockerfile
 # ===============================
 
-# 1. Python bazasini tanlaymiz
 FROM python:3.11-slim
 
-# 2. ffmpeg va boshqa kerakli tizim paketlarini o‘rnatamiz
-RUN apt-get update && \
-    apt-get install -y ffmpeg curl && \
-    rm -rf /var/lib/apt/lists/*
+# 1. Tizim kutubxonalarini o‘rnatamiz
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    curl \
+    build-essential \
+    libffi-dev \
+    libnss3 \
+    && rm -rf /var/lib/apt/lists/*
 
-# 3. Ishchi katalogni belgilaymiz
+# 2. Ishchi papka
 WORKDIR /app
 
-# 4. Talablar faylini nusxalaymiz va o‘rnatamiz
+# 3. Kutubxonalarni o‘rnatish
 COPY requirements.txt .
+RUN pip install --upgrade pip setuptools wheel
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Loyiha fayllarini konteynerga nusxalaymiz
+# 4. Fayllarni konteynerga ko‘chirish
 COPY . .
 
-# 6. Ishlaydigan portni belgilaymiz (Render avtomatik PORT beradi)
+# 5. Portni ko‘rsatish (Render avtomatik beradi)
 EXPOSE 10000
 
-# 7. Botni ishga tushirish
+# 6. Botni ishga tushirish
 CMD ["python", "bot.py"]
