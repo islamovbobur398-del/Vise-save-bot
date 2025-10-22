@@ -1,15 +1,21 @@
+# ===============================
+# 🔹 Universal Downloader Bot — Render deploy konfiguratsiyasi
+# ===============================
+
 services:
   - type: web
     name: universal-downloader-bot
     env: python
+    region: oregon
+    plan: free
+
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
+
     envVars:
       - key: BOT_TOKEN
         sync: false
-      - key: ACR_HOST
+      - key: AUDD_API_TOKEN
         sync: false
-      - key: ACR_ACCESS_KEY
-        sync: false
-      - key: ACR_ACCESS_SECRET
-        sync: false
+      - key: PORT
+        value: 10000
