@@ -1,21 +1,10 @@
-# ===============================
-# 🔹 Universal Downloader Bot — Render deploy konfiguratsiyasi
-# ===============================
-
 services:
   - type: web
-    name: universal-downloader-bot
+    name: vise-save-bot
     env: python
-    region: oregon
     plan: free
-
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
-
     envVars:
-      - key: BOT_TOKEN
-        sync: false
-      - key: AUDD_API_TOKEN
-        sync: false
-      - key: PORT
-        value: 10000
+      - key: PYTHON_VERSION
+        value: 3.11.9
