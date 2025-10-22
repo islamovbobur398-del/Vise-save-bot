@@ -1,31 +1,34 @@
 # ===============================
-# 🔹 Universal Downloader Bot — Xatarsiz Dockerfile
+# 🔹 Universal Downloader Bot — Render uchun to‘liq Dockerfile
 # ===============================
 
 FROM python:3.11-slim
 
-# 1. Tizim kutubxonalarini o‘rnatamiz
+# 1. Tizim kutubxonalarini o‘rnatish
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
     build-essential \
     libffi-dev \
     libnss3 \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Ishchi papka
+# 2. Ishchi katalog
 WORKDIR /app
 
-# 3. Kutubxonalarni o‘rnatish
-COPY requirements.txt .
+# 3. Pipni yangilash
 RUN pip install --upgrade pip setuptools wheel
+
+# 4. Talablar faylini ko‘chirish va o‘rnatish
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 4. Fayllarni konteynerga ko‘chirish
+# 5. Barcha fayllarni konteynerga nusxalash
 COPY . .
 
-# 5. Portni ko‘rsatish (Render avtomatik beradi)
+# 6. Render porti (avtomatik)
 EXPOSE 10000
 
-# 6. Botni ishga tushirish
+# 7. Botni ishga tushirish
 CMD ["python", "bot.py"]
